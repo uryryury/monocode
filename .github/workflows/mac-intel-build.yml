@@ -1,0 +1,42 @@
+name: Mac Intel build (personal)
+
+on:
+  push:
+    branches: [mac-intel-build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - run: npm ci
+
+      - name: Build Intel app and dmg (unsigned, no updater)
+        run: >
+          npx tauri build --target x86_64-apple-darwin --bundles app,dmg
+          --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Check architecture and minimum macOS
+        run: |
+          BIN="target/x86_64-apple-darwin/release/bundle/macos/MonoCode.app/Contents/MacOS/monocode"
+          lipo -archs "$BIN"
+          otool -l "$BIN" | grep -A4 LC_BUILD_VERSION | grep -E "minos|sdk"
+          /usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" \
+            target/x86_64-apple-darwin/release/bundle/macos/MonoCode.app/Contents/Info.plist || true
+          ls -la target/x86_64-apple-darwin/release/bundle/dmg/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MonoCode-math-intel-dmg
+          path: target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
